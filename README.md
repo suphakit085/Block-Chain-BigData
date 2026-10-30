@@ -48,7 +48,21 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 **ข้อสังเกต**
 - Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 5 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm
 - Graph features (in/out-degree) ช่วยได้เล็กน้อย: XGBoost F1 0.804 → 0.810 เมื่อเทียบกับไม่มี graph features
-- Recall ~73% ที่ threshold 0.5 ยังพลาดธุรกรรมผิดกฎหมายราว 1 ใน 4 → ดู notebook 2.2 สำหรับการเลือก threshold ตามนโยบาย และการวิเคราะห์ว่าโมเดลแย่ลงหลัง time step 43 หรือไม่ (paper ต้นฉบับรายงานว่า dark market ขนาดใหญ่ถูกปิดในช่วงนั้น ทำให้รูปแบบเปลี่ยน)
+- Recall ~73% ที่ threshold 0.5 ยังพลาดธุรกรรมผิดกฎหมายราว 1 ใน 4 → notebook 2.2 แสดงการเลือก threshold ตามนโยบายและ Precision@K
+
+### Concept drift: โมเดลพังหลัง time step 43
+
+Recall เฉลี่ยราย time step (threshold 0.5) ก่อนและหลัง time step 43:
+
+| Model | t35–43 | t44–49 | ลดลง |
+|---|---|---|---|
+| Logistic Regression | 0.828 | 0.616 | −0.212 |
+| Random Forest | 0.747 | **0.093** | −0.654 |
+| XGBoost | 0.765 | **0.093** | −0.672 |
+
+- หลัง time step 43 โมเดล tree-based จับธุรกรรมผิดกฎหมายได้ไม่ถึง 10% ตรงกับที่ paper ต้นฉบับ (Weber et al., 2019) รายงานว่า dark market ขนาดใหญ่ถูกปิดช่วงนั้น ทำให้รูปแบบธุรกรรมผิดกฎหมายเปลี่ยนไปจากที่โมเดลเคยเห็น
+- Logistic Regression ทนต่อ drift ได้ดีกว่า (recall ยังเหลือ 0.62) แต่แลกกับ precision ที่ต่ำมาก โมเดลที่ซับซ้อนกว่าจึงเรียนรู้รูปแบบเฉพาะของช่วง train ได้แม่นกว่า แต่ก็ปรับตัวกับรูปแบบใหม่ได้แย่กว่า
+- **นัยต่องานจริง:** ตัวเลข F1 รวมของทั้ง test set (0.81) ซ่อนปัญหานี้ไว้ ระบบ AML ที่ใช้งานจริงต้อง monitor recall รายช่วงเวลา, retrain เมื่อมี label ใหม่ และไม่ควรพึ่งโมเดลเดียวโดยไม่มีกฎหรือคนตรวจประกอบ
 
 ## Dashboard (Streamlit)
 
@@ -119,7 +133,7 @@ crypto-project/
 - Features ของ Elliptic ถูก anonymize จึงอธิบายความหมายทางธุรกิจของแต่ละ feature ไม่ได้ (SHAP บอกได้แค่ว่า `feat_x` สำคัญ)
 - ยังไม่ได้ใช้ข้อมูลจาก 157k ธุรกรรมที่ไม่มี label (เช่น semi-supervised)
 - ลอง Graph Neural Network (GCN) ที่ใช้โครงสร้างกราฟเต็มรูปแบบ แทน degree features
-- ระบบจริงควร retrain เป็นระยะ และ monitor recall รายช่วงเวลาตามที่เห็นใน drift analysis
+- ทดลองรับมือ drift: retrain แบบ rolling window, ensemble กับ Logistic Regression, หรือแจ้งเตือนอัตโนมัติเมื่อ distribution ของ score เปลี่ยน
 
 ## ทีมพัฒนา
 
