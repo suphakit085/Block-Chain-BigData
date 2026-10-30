@@ -7,5 +7,7 @@ xgboost
 matplotlib
 seaborn
 networkx
+pyvis
 imbalanced-learn
 shap
+jupyter
