@@ -2,7 +2,10 @@
 import pickle
 import os
 import streamlit as st
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix,
+    average_precision_score, precision_recall_curve
+)
 import numpy as np
 
 # Constants
@@ -62,35 +65,172 @@ def get_feature_importance(model, feature_names):
     return None
 
 
-def get_model_metrics(models, X_test, y_test):
+def predict_with_threshold(model, X, threshold=0.5):
+    """Flag a transaction as fraud when P(fraud) >= threshold."""
+    return (model.predict_proba(X)[:, 1] >= threshold).astype(int)
+
+
+def get_model_metrics(models, X_test, y_test, threshold=0.5):
     """
-    Calculate performance metrics for all models.
-    Returns a DataFrame with Accuracy, Precision, Recall, F1 for each model.
+    Calculate performance metrics for all models at the given alert threshold.
+    Returns a DataFrame with Accuracy, Precision, Recall, F1 and PR-AUC for each model.
+    PR-AUC (average precision) does not depend on the threshold and is the
+    fairest single number for an imbalanced problem like AML.
     """
     results = []
-    
+
     for name, model in models.items():
-        y_pred = model.predict(X_test)
-        
+        y_prob = model.predict_proba(X_test)[:, 1]
+        y_pred = (y_prob >= threshold).astype(int)
+
         results.append({
             'Model': name,
             'Accuracy': accuracy_score(y_test, y_pred),
             'Precision': precision_score(y_test, y_pred, zero_division=0),
             'Recall': recall_score(y_test, y_pred, zero_division=0),
-            'F1 Score': f1_score(y_test, y_pred, zero_division=0)
+            'F1 Score': f1_score(y_test, y_pred, zero_division=0),
+            'PR-AUC': average_precision_score(y_test, y_prob)
         })
-    
+
     return pd.DataFrame(results)
 
 
-def get_confusion_matrix_data(model, X_test, y_test):
+def get_confusion_matrix_data(model, X_test, y_test, threshold=0.5):
     """
-    Generate confusion matrix data for a given model.
+    Generate confusion matrix data for a given model at the given threshold.
     Returns the confusion matrix as a numpy array.
     """
-    y_pred = model.predict(X_test)
-    cm = confusion_matrix(y_test, y_pred)
+    y_pred = predict_with_threshold(model, X_test, threshold)
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
     return cm
+
+
+def get_pr_curve(model, X_test, y_test):
+    """Precision-recall curve points for the selected model."""
+    y_prob = model.predict_proba(X_test)[:, 1]
+    precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
+    # precision/recall have one more point than thresholds; drop the last one
+    return pd.DataFrame({
+        'Threshold': thresholds,
+        'Precision': precision[:-1],
+        'Recall': recall[:-1],
+    })
+
+
+def get_precision_at_k(model, X_test, y_test, ks=(100, 250, 500, 1000)):
+    """
+    "If the compliance team can review only K alerts, how many are real fraud?"
+    Ranks test transactions by fraud probability and checks the top K.
+    """
+    y_prob = model.predict_proba(X_test)[:, 1]
+    order = np.argsort(-y_prob)
+    y_sorted = np.asarray(y_test)[order]
+    total_fraud = int(y_sorted.sum())
+    rows = []
+    for k in ks:
+        if k > len(y_sorted):
+            continue
+        hits = int(y_sorted[:k].sum())
+        rows.append({
+            'Review budget (K)': k,
+            'Fraud found': hits,
+            'Precision@K': hits / k,
+            'Share of all fraud caught': hits / total_fraud if total_fraud else 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
+def get_metrics_by_time_step(model, test_df, feature_cols, threshold=0.5):
+    """
+    Per-time-step precision/recall on the test period.
+    Shows whether the model degrades over time (concept drift).
+    """
+    rows = []
+    for t, group in test_df.groupby('time_step'):
+        y_true = group['label']
+        y_pred = predict_with_threshold(model, group[feature_cols], threshold)
+        rows.append({
+            'time_step': int(t),
+            'Fraud count': int(y_true.sum()),
+            'Precision': precision_score(y_true, y_pred, zero_division=0),
+            'Recall': recall_score(y_true, y_pred, zero_division=0),
+            'F1 Score': f1_score(y_true, y_pred, zero_division=0),
+        })
+    return pd.DataFrame(rows)
+
+
+# ============================================
+# Transaction Network (graph) Functions
+# ============================================
+EDGELIST_PATH = 'data/raw/elliptic_txs_edgelist.csv'
+
+
+@st.cache_resource
+def load_transaction_graph():
+    """
+    Builds the directed Bitcoin transaction graph (txId1 -> txId2) once and caches it.
+    Returns None if the edge list file is not available.
+    """
+    if not os.path.exists(EDGELIST_PATH):
+        return None
+    import networkx as nx
+    edges = pd.read_csv(EDGELIST_PATH)
+    return nx.from_pandas_edgelist(
+        edges, source=edges.columns[0], target=edges.columns[1], create_using=nx.DiGraph()
+    )
+
+
+def build_neighbor_graph_html(G, tx_id, label_map, hops=1, max_nodes=150):
+    """
+    Renders the neighbourhood of one transaction as interactive HTML (pyvis).
+    Red = illicit, green = licit, grey = unknown label.
+    Returns (html, n_nodes, n_illicit_neighbors) or (None, 0, 0) if tx is not in the graph.
+    """
+    from pyvis.network import Network
+
+    if G is None or tx_id not in G:
+        return None, 0, 0
+
+    nodes = {tx_id}
+    frontier = {tx_id}
+    for _ in range(hops):
+        nxt = set()
+        for n in frontier:
+            nxt.update(G.successors(n))
+            nxt.update(G.predecessors(n))
+        nxt -= nodes
+        nodes |= nxt
+        frontier = nxt
+        if len(nodes) >= max_nodes:
+            break
+    if len(nodes) > max_nodes:
+        others = sorted(nodes - {tx_id})[:max_nodes - 1]
+        nodes = {tx_id, *others}
+
+    sub = G.subgraph(nodes)
+    net = Network(height='420px', width='100%', bgcolor='#0E1117', font_color='#FAFAFA',
+                  directed=True, cdn_resources='in_line')  # embed JS so it works inside Streamlit/offline
+    net.barnes_hut()
+
+    n_illicit = 0
+    for n in sub.nodes():
+        label = label_map.get(n, -1)
+        if n != tx_id and label == 1:
+            n_illicit += 1
+        color = '#FF2D7C' if label == 1 else ('#00FF88' if label == 0 else '#666666')
+        status = 'Illicit' if label == 1 else ('Licit' if label == 0 else 'Unknown')
+        net.add_node(
+            str(n),
+            label='THIS TX' if n == tx_id else str(n)[-4:],
+            title=f"txId {n} — {status}",
+            color={'background': color, 'border': '#00D4FF' if n == tx_id else color},
+            size=28 if n == tx_id else 12,
+            borderWidth=4 if n == tx_id else 1,
+        )
+    for u, v in sub.edges():
+        net.add_edge(str(u), str(v), color='rgba(255,255,255,0.35)', arrows='to')
+
+    return net.generate_html(notebook=False), sub.number_of_nodes(), n_illicit
 
 
 def create_export_data(tx_data, prediction, probability, model_name):
