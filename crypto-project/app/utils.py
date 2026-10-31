@@ -53,8 +53,21 @@ def load_models():
     
     return models
 
+def _unwrap(model, X):
+    """
+    Split a sklearn Pipeline into (final_estimator, X transformed by the earlier steps).
+    Plain estimators are returned unchanged. Explainers and importances work on the
+    final estimator, in the feature space it was fitted on (e.g. standardised for LR).
+    """
+    if hasattr(model, 'steps') and len(model.steps) > 1:
+        Xt = model[:-1].transform(X)
+        return model[-1], pd.DataFrame(Xt, columns=X.columns, index=X.index)
+    return model, X
+
+
 def get_feature_importance(model, feature_names):
     """Extracts feature importance if the model supports it."""
+    model = model[-1] if hasattr(model, 'steps') else model
     if hasattr(model, 'feature_importances_'):
         return pd.DataFrame({
             'Feature': feature_names,
@@ -282,6 +295,8 @@ def get_shap_global_values(_model, X_sample, _model_name):
         else:
             X_bg = X_sample
         
+        _model, X_bg = _unwrap(_model, X_bg)
+        
         # Choose explainer based on model type
         if hasattr(_model, 'feature_importances_'):
             # Tree-based models (Random Forest, XGBoost)
@@ -319,6 +334,8 @@ def get_shap_single_values(model, features, X_background, model_name):
         else:
             X_bg = X_background
         
+        _, features = _unwrap(model, features)
+        model, X_bg = _unwrap(model, X_bg)
         if hasattr(model, 'feature_importances_'):
             explainer = shap.TreeExplainer(model)
             shap_values = _fraud_class_shap(explainer.shap_values(features))

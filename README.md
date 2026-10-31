@@ -43,7 +43,7 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 |---|---|---|---|---|
 | **XGBoost** | **0.905** | 0.733 | **0.810** | 0.941 |
 | Random Forest | 0.926 | 0.718 | 0.809 | 0.945 |
-| Logistic Regression | 0.205 | 0.837 | 0.329 | 0.883 |
+| Logistic Regression (scaled, C=0.01) | 0.168 | 0.902 | 0.284 | 0.881 |
 
 **ข้อสังเกต**
 - Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 5 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm

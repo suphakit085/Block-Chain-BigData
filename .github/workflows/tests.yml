@@ -1,0 +1,22 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crypto-project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crypto-project/requirements*.txt
+      # jupyter/kaggle are only needed for notebooks and data download
+      - run: grep -vE '^(jupyter|kaggle)' requirements.txt > /tmp/req.txt && pip install -r /tmp/req.txt pytest
+      - run: python -m pytest tests -q

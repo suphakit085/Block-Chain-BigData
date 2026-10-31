@@ -52,3 +52,9 @@ def test_metrics_by_time_step_groups_correctly():
     out = utils.get_metrics_by_time_step(model, df, ['a'], 0.5)
     assert out['time_step'].tolist() == [35, 36]
     assert out['Fraud count'].tolist() == [1, 1]
+
+
+def test_app_entrypoint_compiles():
+    # main.py runs Streamlit code at import time, so only check that it parses
+    import py_compile
+    py_compile.compile(str(Path(__file__).resolve().parent.parent / 'app' / 'main.py'), doraise=True)
