@@ -176,6 +176,31 @@ def get_metrics_by_time_step(model, test_df, feature_cols, threshold=0.5):
     return pd.DataFrame(rows)
 
 
+DRIFT_STEP = 43  # dark-market shutdown in the Elliptic data; patterns change from here
+
+
+def get_metrics_by_period(model, test_df, feature_cols, threshold=0.5, split_step=DRIFT_STEP):
+    """
+    Precision/recall/F1 before and after `split_step`.
+    The overall test-set F1 hides that recall collapses after the regime change.
+    """
+    rows = []
+    for name, part in [(f"Steps {int(test_df['time_step'].min())}-{split_step - 1}", test_df[test_df['time_step'] < split_step]),
+                       (f"Steps {split_step}-{int(test_df['time_step'].max())}", test_df[test_df['time_step'] >= split_step])]:
+        if part.empty:
+            continue
+        y_true = part['label']
+        y_pred = predict_with_threshold(model, part[feature_cols], threshold)
+        rows.append({
+            'Period': name,
+            'Illicit': int(y_true.sum()),
+            'Precision': precision_score(y_true, y_pred, zero_division=0),
+            'Recall': recall_score(y_true, y_pred, zero_division=0),
+            'F1 Score': f1_score(y_true, y_pred, zero_division=0),
+        })
+    return pd.DataFrame(rows)
+
+
 # ============================================
 # Transaction Network (graph) Functions
 # ============================================
