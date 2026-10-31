@@ -448,7 +448,7 @@ if df is not None and models:
             textinfo='percent+label',
             marker=dict(line=dict(color='#0E1117', width=2))
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
     
     with col_chart2:
         # Time-based distribution
@@ -475,7 +475,7 @@ if df is not None and models:
             yaxis_title="Count",
             legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
         )
-        st.plotly_chart(fig_time, use_container_width=True)
+        st.plotly_chart(fig_time, width='stretch')
     
     # ============================================
     # 2. MODEL COMPARISON TABLE
@@ -505,7 +505,7 @@ if df is not None and models:
         styled_df = metrics_df.copy()
         for col in ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'PR-AUC']:
             styled_df[col] = styled_df[col].apply(lambda x: f"{x:.2%}")
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, width='stretch', hide_index=True)
     
     with col_bar:
         st.markdown("#### F1 Score Comparison")
@@ -524,7 +524,7 @@ if df is not None and models:
             coloraxis_showscale=False,
             yaxis=dict(tickformat='.0%')
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
     
     # ============================================
     # 3. CONFUSION MATRIX
@@ -555,7 +555,7 @@ if df is not None and models:
         xaxis=dict(side='bottom'),
         height=400
     )
-    st.plotly_chart(fig_cm, use_container_width=True)
+    st.plotly_chart(fig_cm, width='stretch')
     
     # ============================================
     # 3.1 ALERT THRESHOLD & REVIEW BUDGET
@@ -593,7 +593,7 @@ if df is not None and models:
             height=420,
             legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5)
         )
-        st.plotly_chart(fig_pr, use_container_width=True)
+        st.plotly_chart(fig_pr, width='stretch')
     
     with col_budget:
         st.markdown("#### If the team can review only K alerts…")
@@ -601,7 +601,7 @@ if df is not None and models:
         pk_show = pk_df.copy()
         pk_show['Precision@K'] = pk_show['Precision@K'].apply(lambda x: f"{x:.1%}")
         pk_show['Share of all fraud caught'] = pk_show['Share of all fraud caught'].apply(lambda x: f"{x:.1%}")
-        st.dataframe(pk_show, use_container_width=True, hide_index=True)
+        st.dataframe(pk_show, width='stretch', hide_index=True)
         st.caption(f"Ranks the {len(X_test):,} test transactions by fraud probability and checks the top K. "
                    f"Test period contains {int(y_test.sum()):,} illicit transactions.")
     
@@ -634,7 +634,7 @@ if df is not None and models:
     )
     fig_ts.update_yaxes(title_text='Score', range=[0, 1.05], tickformat='.0%', secondary_y=False)
     fig_ts.update_yaxes(title_text='Illicit tx count', showgrid=False, secondary_y=True)
-    st.plotly_chart(fig_ts, use_container_width=True)
+    st.plotly_chart(fig_ts, width='stretch')
     
     # ============================================
     # 3.5 SHAP GLOBAL FEATURE IMPORTANCE
@@ -678,7 +678,7 @@ if df is not None and models:
                 height=500,
                 margin=dict(l=10, r=10, t=40, b=40)
             )
-            st.plotly_chart(fig_shap_bar, use_container_width=True)
+            st.plotly_chart(fig_shap_bar, width='stretch')
         
         with col_shap_compare:
             # Compare SHAP vs Traditional Feature Importance
@@ -731,7 +731,7 @@ if df is not None and models:
                     xaxis=dict(tickangle=-45),
                     margin=dict(l=10, r=10, t=40, b=80)
                 )
-                st.plotly_chart(fig_compare, use_container_width=True)
+                st.plotly_chart(fig_compare, width='stretch')
     else:
         st.info("SHAP analysis is not available for this model.")
     
@@ -760,7 +760,7 @@ if df is not None and models:
     
     with col_input:
         if sample_method == "Random Sample":
-            if st.button("Get Random Transaction", use_container_width=True):
+            if st.button("Get Random Transaction", width='stretch'):
                 selected_tx = test_txs.sample(1)
                 st.session_state['selected_tx'] = selected_tx
             elif 'selected_tx' in st.session_state:
@@ -774,14 +774,19 @@ if df is not None and models:
     
     if selected_tx is not None:
         with st.expander("Transaction Details", expanded=True):
-            st.dataframe(selected_tx.head(), use_container_width=True)
+            st.dataframe(selected_tx.head(), width='stretch')
         
         # Prepare features
         features = selected_tx.drop(columns=['label', 'txId', 'time_step'], errors='ignore')
         if 'class' in features.columns:
             features = features.drop(columns=['class'])
         
-        if st.button("Analyze Transaction", use_container_width=True, type="primary"):
+        # Keep the result on screen across reruns (e.g. moving the threshold slider)
+        current_tx_id = int(selected_tx['txId'].values[0])
+        if st.button("Analyze Transaction", width='stretch', type="primary"):
+            st.session_state['analyzed_tx'] = current_tx_id
+        
+        if st.session_state.get('analyzed_tx') == current_tx_id:
             probability = model.predict_proba(features)[0][1]
             prediction = int(probability >= threshold)
             
@@ -810,7 +815,7 @@ if df is not None and models:
             
             with col_prob:
                 st.markdown("#### Fraud Probability")
-                st.metric(label="", value=f"{probability:.1%}")
+                st.metric(label="Fraud probability", value=f"{probability:.1%}", label_visibility="collapsed")
                 st.progress(float(probability))
             
             # Ground Truth Comparison
@@ -863,7 +868,7 @@ if df is not None and models:
                         coloraxis_showscale=False,
                         height=400
                     )
-                    st.plotly_chart(fig_imp, use_container_width=True)
+                    st.plotly_chart(fig_imp, width='stretch')
                 
                 with col_radar:
                     # Radar Chart
@@ -909,7 +914,7 @@ if df is not None and models:
                         height=400,
                         legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
                     )
-                    st.plotly_chart(fig_radar, use_container_width=True)
+                    st.plotly_chart(fig_radar, width='stretch')
             
             # ============================================
             # 5.5 SHAP WATERFALL - Per Transaction
@@ -968,16 +973,17 @@ if df is not None and models:
                         line=dict(color='rgba(255,255,255,0.3)', width=1, dash='dash')
                     )]
                 )
-                st.plotly_chart(fig_waterfall, use_container_width=True)
+                st.plotly_chart(fig_waterfall, width='stretch')
                 
                 # Summary info
                 col_base, col_output = st.columns(2)
                 with col_base:
+                    shap_unit = "probability" if selected_model_name == "Random Forest" else "log-odds"
                     st.markdown(f"""
                     <div class="glass-card" style="text-align:center;">
                         <div style="color:#888;font-size:0.85rem;">BASE VALUE</div>
                         <div style="font-size:1.5rem;font-weight:700;color:#00D4FF;">{base_val:.4f}</div>
-                        <div style="color:#666;font-size:0.75rem;">Average model output</div>
+                        <div style="color:#666;font-size:0.75rem;">Average model output ({shap_unit})</div>
                     </div>
                     """, unsafe_allow_html=True)
                 with col_output:
@@ -987,7 +993,7 @@ if df is not None and models:
                     <div class="glass-card" style="text-align:center;">
                         <div style="color:#888;font-size:0.85rem;">FINAL OUTPUT</div>
                         <div style="font-size:1.5rem;font-weight:700;color:{output_color};">{output_val:.4f}</div>
-                        <div style="color:#666;font-size:0.75rem;">Base + SHAP contributions</div>
+                        <div style="color:#666;font-size:0.75rem;">Base + SHAP contributions ({shap_unit})</div>
                     </div>
                     """, unsafe_allow_html=True)
             else:
@@ -1036,7 +1042,7 @@ if df is not None and models:
                     data=csv,
                     file_name=f"fraud_prediction_{selected_tx['txId'].values[0]}.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    width='stretch'
                 )
     
     # ============================================

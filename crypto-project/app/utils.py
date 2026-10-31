@@ -9,8 +9,12 @@ from sklearn.metrics import (
 import numpy as np
 
 # Constants
-DATA_PATH = 'data/processed/elliptic_bitcoin_dataset_v1_graph.csv'
-MODELS_DIR = 'models'
+from pathlib import Path
+
+# Resolve paths from the repo root so the app works regardless of the launch directory
+ROOT = Path(__file__).resolve().parent.parent
+DATA_PATH = str(ROOT / 'data/processed/elliptic_bitcoin_dataset_v1_graph.csv')
+MODELS_DIR = str(ROOT / 'models')
 
 @st.cache_data
 def load_data():
@@ -162,7 +166,7 @@ def get_metrics_by_time_step(model, test_df, feature_cols, threshold=0.5):
 # ============================================
 # Transaction Network (graph) Functions
 # ============================================
-EDGELIST_PATH = 'data/raw/elliptic_txs_edgelist.csv'
+EDGELIST_PATH = str(ROOT / 'data/raw/elliptic_txs_edgelist.csv')
 
 
 @st.cache_resource
@@ -249,6 +253,21 @@ def create_export_data(tx_data, prediction, probability, model_name):
 # ============================================
 import shap
 
+
+def _fraud_class_shap(shap_values):
+    """
+    Return SHAP values for the fraud class as a 2D (rows, features) array.
+    Older shap returns a list [class0, class1]; newer versions return a 3D
+    array (rows, features, classes) for sklearn tree ensembles.
+    """
+    if isinstance(shap_values, list):
+        return np.asarray(shap_values[1])
+    shap_values = np.asarray(shap_values)
+    if shap_values.ndim == 3:
+        return shap_values[:, :, 1]
+    return shap_values
+
+
 @st.cache_data
 def get_shap_global_values(_model, X_sample, _model_name):
     """
@@ -267,10 +286,7 @@ def get_shap_global_values(_model, X_sample, _model_name):
         if hasattr(_model, 'feature_importances_'):
             # Tree-based models (Random Forest, XGBoost)
             explainer = shap.TreeExplainer(_model)
-            shap_values = explainer.shap_values(X_bg)
-            # For binary classification, take class 1 (Fraud)
-            if isinstance(shap_values, list):
-                shap_values = shap_values[1]
+            shap_values = _fraud_class_shap(explainer.shap_values(X_bg))
         elif hasattr(_model, 'coef_'):
             # Linear models (Logistic Regression)
             explainer = shap.LinearExplainer(_model, X_bg)
@@ -285,7 +301,7 @@ def get_shap_global_values(_model, X_sample, _model_name):
             'SHAP_Importance': mean_shap
         }).sort_values('SHAP_Importance', ascending=False)
         
-        return feature_importance, explainer
+        return feature_importance, None
     except Exception as e:
         st.warning(f"SHAP calculation error: {e}")
         return None, None
@@ -305,18 +321,16 @@ def get_shap_single_values(model, features, X_background, model_name):
         
         if hasattr(model, 'feature_importances_'):
             explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(features)
-            if isinstance(shap_values, list):
-                shap_values = shap_values[1]
+            shap_values = _fraud_class_shap(explainer.shap_values(features))
             base_value = explainer.expected_value
-            if isinstance(base_value, (list, np.ndarray)):
+            if isinstance(base_value, (list, np.ndarray)) and np.size(base_value) > 1:
                 base_value = base_value[1]
         elif hasattr(model, 'coef_'):
             explainer = shap.LinearExplainer(model, X_bg)
             shap_values = explainer.shap_values(features)
             base_value = explainer.expected_value
             if isinstance(base_value, (list, np.ndarray)):
-                base_value = base_value[0]
+                base_value = np.ravel(base_value)[0]
         else:
             return None, None
         
