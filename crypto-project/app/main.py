@@ -9,6 +9,7 @@ from utils import (
     get_model_metrics, get_confusion_matrix_data, create_export_data,
     get_shap_global_values, get_shap_single_values,
     predict_with_threshold, get_pr_curve, get_precision_at_k, get_metrics_by_time_step,
+    get_metrics_by_period, DRIFT_STEP,
     load_transaction_graph, build_neighbor_graph_html
 )
 import streamlit.components.v1 as components
@@ -496,6 +497,25 @@ if df is not None and models:
     
     # Get metrics for all models
     metrics_df = get_model_metrics(models, X_test, y_test, threshold)
+    
+    # Headline numbers over the whole test set hide the regime change at step 43
+    period_df = get_metrics_by_period(model, test_df, X_test.columns.tolist(), threshold)
+    if len(period_df) == 2:
+        before, after = period_df.iloc[0], period_df.iloc[1]
+        st.warning(
+            f"**Concept drift — {selected_model_name}:** recall {before['Recall']:.0%} on {before['Period'].lower()} "
+            f"but {after['Recall']:.0%} on {after['Period'].lower()} (F1 {before['F1 Score']:.2f} → {after['F1 Score']:.2f}). "
+            f"Patterns changed after time step {DRIFT_STEP} (dark-market shutdown), so the overall numbers below "
+            f"overstate performance on recent data. A deployed model would need regular retraining."
+        )
+        col_before, col_after = st.columns(2)
+        for col, r in [(col_before, before), (col_after, after)]:
+            with col:
+                st.markdown(f"**{r['Period']}** · {r['Illicit']:,} illicit")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Recall", f"{r['Recall']:.1%}")
+                c2.metric("Precision", f"{r['Precision']:.1%}")
+                c3.metric("F1", f"{r['F1 Score']:.2f}")
     
     # Display as styled table
     col_table, col_bar = st.columns([1, 1])

@@ -58,3 +58,11 @@ def test_app_entrypoint_compiles():
     # main.py runs Streamlit code at import time, so only check that it parses
     import py_compile
     py_compile.compile(str(Path(__file__).resolve().parent.parent / 'app' / 'main.py'), doraise=True)
+
+
+def test_metrics_by_period_splits_at_drift_step():
+    df = pd.DataFrame({'a': range(4), 'time_step': [35, 42, 43, 49], 'label': [1, 0, 1, 0]})
+    out = utils.get_metrics_by_period(model, df, ['a'], 0.5)
+    assert out['Period'].tolist() == ['Steps 35-42', 'Steps 43-49']
+    # probs [0.9, 0.8, 0.4, 0.1]: fraud at step 35 is caught, fraud at step 43 is missed
+    assert out['Recall'].tolist() == [1.0, 0.0]
