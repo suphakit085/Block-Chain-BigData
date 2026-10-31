@@ -46,9 +46,19 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 | Logistic Regression (scaled, C=0.01) | 0.168 | 0.902 | 0.284 | 0.881 |
 
 **ข้อสังเกต**
-- Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 5 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm
+- Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 6 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm
 - Graph features (in/out-degree) ช่วยได้เล็กน้อย: XGBoost F1 0.804 → 0.810 เมื่อเทียบกับไม่มี graph features
 - Recall ~73% ที่ threshold 0.5 ยังพลาดธุรกรรมผิดกฎหมายราว 1 ใน 4 → ดู notebook 2.2 สำหรับการเลือก threshold ตามนโยบาย และการวิเคราะห์ว่าโมเดลแย่ลงหลัง time step 43 หรือไม่ (paper ต้นฉบับรายงานว่า dark market ขนาดใหญ่ถูกปิดในช่วงนั้น ทำให้รูปแบบเปลี่ยน)
+
+## การตรวจสอบเพิ่มเติม (`scripts/validate_threshold.py`)
+
+แบ่งตามเวลา: train 1–24, validation 25–34, test 35–49 (ใช้ test รายงานผลอย่างเดียว) ผลเต็มอยู่ใน `reports/threshold_validation.csv`
+
+- **เลือก threshold บน validation ใช้กับ test ไม่ได้ผล**: F1 บน validation สูง 0.94–0.96 แต่บน test เหลือ 0.74–0.80 (concept drift) XGBoost ที่ใช้ threshold จาก validation (0.28) ได้ F1 0.758 ต่ำกว่าใช้ 0.5 (0.779) จึงรายงานผลที่ threshold 0.5 คู่กับกราฟ drift
+- **SMOTE ไม่ได้แย่กว่า class weight**: PR-AUC บน test ของ RF 0.785 เทียบ 0.773 และ XGBoost 0.784 เทียบ 0.764
+- **Isotonic calibration ช่วยให้ probability ตรงขึ้น** (Brier ของ RF 0.033 → 0.023) แต่ไม่ได้ช่วยแยกธุรกรรมผิดกฎหมายได้ดีขึ้น
+- **Degree features ไม่รั่วข้อมูลอนาคต**: edge ทั้ง 234,355 เส้นอยู่ภายใน time step เดียวกัน
+- Logistic Regression ต้อง scale ฟีเจอร์ (PR-AUC 0.19 → 0.36) แต่ยังอ่อนกว่าโมเดล tree มาก
 
 ## Dashboard (Streamlit)
 
