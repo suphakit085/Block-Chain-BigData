@@ -1,5 +1,6 @@
 streamlit>=1.50,<2
 pandas>=2.2,<3
+pyarrow>=15
 numpy>=2.0,<3
 plotly>=6.0,<7
 # Saved models are pickles: keep sklearn/xgboost on the versions they were trained with

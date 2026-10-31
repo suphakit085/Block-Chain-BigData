@@ -15,43 +15,64 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = str(ROOT / 'data/processed/elliptic_bitcoin_dataset_v1_graph.csv')
 MODELS_DIR = str(ROOT / 'models')
+# Compact, lossless copies used when the full CSVs are absent (hosted deployment)
+DEPLOY_DIR = ROOT / 'deploy_data'
+DEPLOY_DATA_PATH = str(DEPLOY_DIR / 'elliptic_v1_graph.parquet')
+DEPLOY_EDGELIST_PATH = str(DEPLOY_DIR / 'elliptic_txs_edgelist.parquet')
+
 
 @st.cache_data
 def load_data():
-    """Loads the V1 graph dataset efficiently."""
+    """Loads the V1 graph dataset: the local CSV if present, else the bundled parquet."""
     try:
         if os.path.exists(DATA_PATH):
             df = pd.read_csv(DATA_PATH)
-            # Rename for clarity if needed
-            if 'feat_0' in df.columns:
-                df = df.rename(columns={'feat_0': 'time_step'})
-            return df
+        elif os.path.exists(DEPLOY_DATA_PATH):
+            df = pd.read_parquet(DEPLOY_DATA_PATH)
         else:
-            st.error(f"Dataset not found at {DATA_PATH}")
+            st.error(f"Dataset not found at {DATA_PATH} or {DEPLOY_DATA_PATH}")
             return None
+        if 'feat_0' in df.columns:
+            df = df.rename(columns={'feat_0': 'time_step'})
+        return df
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
 
-@st.cache_resource
-def load_models():
-    """Loads all available V1 models from the models directory."""
-    models = {}
-    model_files = {
-        "Logistic Regression": "logistic_regression_smote_v1_graph.pkl",
-        "Random Forest": "random_forest_smote_v1_graph.pkl",
-        "XGBoost": "xgboost_smote_v1_graph.pkl"
-    }
 
-    for name, filename in model_files.items():
-        path = os.path.join(MODELS_DIR, filename)
+@st.cache_resource(show_spinner=False)
+def load_models():
+    """
+    Loads the saved V1 models from models/. Any that are missing are trained from
+    the loaded data (same recipe as scripts/train_models.py) and saved when possible,
+    so a hosted deployment works without pickles in the repo.
+    """
+    from training import make_models, model_filename, train_models
+
+    models, missing = {}, []
+    for name in make_models():
+        path = os.path.join(MODELS_DIR, model_filename(name))
         if os.path.exists(path):
             with open(path, 'rb') as file:
                 models[name] = pickle.load(file)
         else:
-            st.warning(f"Model file {filename} not found.")
-    
-    return models
+            missing.append(name)
+
+    if missing:
+        df = load_data()
+        if df is None:
+            return models
+        with st.spinner(f"Training {', '.join(missing)} (first start only, ~1 min)..."):
+            trained = train_models(df, names=missing, log=lambda *_: None)
+        for name, model in trained.items():
+            models[name] = model
+            try:
+                os.makedirs(MODELS_DIR, exist_ok=True)
+                with open(os.path.join(MODELS_DIR, model_filename(name)), 'wb') as file:
+                    pickle.dump(model, file)
+            except OSError:
+                pass  # read-only filesystem: keep the in-memory model only
+    return dict(sorted(models.items()))  # stable order: LR, RF, XGBoost
 
 def _unwrap(model, X):
     """
@@ -213,10 +234,13 @@ def load_transaction_graph():
     Builds the directed Bitcoin transaction graph (txId1 -> txId2) once and caches it.
     Returns None if the edge list file is not available.
     """
-    if not os.path.exists(EDGELIST_PATH):
-        return None
     import networkx as nx
-    edges = pd.read_csv(EDGELIST_PATH)
+    if os.path.exists(EDGELIST_PATH):
+        edges = pd.read_csv(EDGELIST_PATH)
+    elif os.path.exists(DEPLOY_EDGELIST_PATH):
+        edges = pd.read_parquet(DEPLOY_EDGELIST_PATH)
+    else:
+        return None
     return nx.from_pandas_edgelist(
         edges, source=edges.columns[0], target=edges.columns[1], create_using=nx.DiGraph()
     )
