@@ -1057,4 +1057,6 @@ if df is not None and models:
 
 else:
     st.error("Please ensure the dataset and models are available.")
-    st.info("Run the Jupyter notebooks in `/notebooks/` to generate the required files.")
+    st.info("Dataset: run `python scripts/download_data.py`, then `notebooks/1.0-data-prep.ipynb`.  
+"
+            "Models: run `python scripts/train_models.py`.")
