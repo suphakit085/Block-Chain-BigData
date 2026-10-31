@@ -357,6 +357,7 @@ if df is not None and models:
         selected_model_name = st.selectbox(
             "Select Model",
             list(models.keys()),
+            index=list(models.keys()).index("XGBoost") if "XGBoost" in models else 0,
             help="Choose the ML model for fraud detection"
         )
         model = models[selected_model_name]
