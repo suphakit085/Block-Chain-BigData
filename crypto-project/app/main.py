@@ -761,8 +761,13 @@ if df is not None and models:
     
     with col_input:
         if sample_method == "Random Sample":
-            if st.button("Get Random Transaction", width='stretch'):
-                selected_tx = test_txs.sample(1)
+            btn_any, btn_fraud = st.columns(2)
+            pick_any = btn_any.button("Get Random Transaction", width='stretch')
+            pick_fraud = btn_fraud.button("Get Random Fraud", width='stretch',
+                                          help="Pick only from known-illicit transactions in the test period")
+            if pick_any or pick_fraud:
+                pool = test_txs[test_txs['label'] == 1] if pick_fraud else test_txs
+                selected_tx = pool.sample(1)
                 st.session_state['selected_tx'] = selected_tx
             elif 'selected_tx' in st.session_state:
                 selected_tx = st.session_state['selected_tx']
