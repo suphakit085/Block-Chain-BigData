@@ -79,6 +79,19 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 
 ตัวเลข F1 0.805 รวมทั้งช่วงจึงดีกว่าความจริงหลัง step 43 มาก PR-AUC หลัง step 43 (0.057) ใกล้ prevalence ของช่วงนั้น (~0.025) แปลว่า *การจัดอันดับก็ใช้ไม่ได้* ไม่ใช่แค่ threshold ผิด การลด threshold จึงไม่ช่วย ต้อง retrain ด้วยข้อมูลใหม่หรือใช้โมเดลที่ทนต่อ drift ในระบบจริงต้อง monitor recall รายช่วงเวลา (ดู "Performance Over Time" ใน dashboard)
 
+**retrain ช่วยได้แค่ไหน** (`scripts/drift_retraining.py`, walk-forward: ทำนายแต่ละ step ด้วยโมเดลที่ฝึกจาก step ก่อนหน้า, label มาช้า 1 step, XGBoost, step 43–49)
+
+| กลยุทธ์ | PR-AUC | Recall @0.5 | Recall @0.1 | Precision @0.1 |
+|---|---|---|---|---|
+| static (ฝึกครั้งเดียว step 1–34) | 0.044 | 0.024 | 0.047 | 0.028 |
+| expanding (ฝึกใหม่ด้วยข้อมูลทั้งหมดที่รู้ label) | **0.434** | 0.154 | **0.462** | 0.520 |
+| sliding window 5 step | 0.401 | 0.112 | 0.402 | 0.576 |
+| sliding window 10 step | 0.265 | 0.077 | 0.260 | 0.386 |
+
+- การ retrain คืน *ความสามารถในการจัดอันดับ* ได้มาก (PR-AUC 0.04 → 0.43) แต่โมเดลยังระวังเกินไปที่ threshold 0.5 ต้องลด threshold (ที่ 0.1 ได้ recall ~46%, precision ~52%) ซึ่งตัวเลขตรงนี้เลือก threshold จากช่วงทดสอบเอง จึงเป็นภาพที่ดีเกินจริงเล็กน้อย
+- window ยาวดีกว่า window สั้น (ข้อมูล illicit สะสมมากกว่า) และถ้า label มาช้า 3 step ผลลดลงมาก (expanding PR-AUC 0.43 → 0.16) → **ความเร็วของ label feedback สำคัญพอ ๆ กับตัวโมเดล**
+- ยังไม่ถึงระดับก่อน step 43 (F1 ~0.90) ถึงอย่างนั้นก็ดีกว่าไม่ retrain อย่างชัดเจน
+
 **Ablation** (F1 บน test): ทุกฟีเจอร์ 0.805 · ไม่มี degree 0.811 · local-only 93 ตัว 0.70 · degree อย่างเดียว 0.16
 
 ## Dashboard (Streamlit)
