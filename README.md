@@ -52,6 +52,21 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 - Graph features (in/out-degree) **ไม่ได้ช่วย**: XGBoost ไม่มี degree ได้ F1 0.811 เทียบกับมี 0.805 (อยู่ในช่วงความคลาดเคลื่อน) ฟีเจอร์ที่ช่วยจริงคือ aggregated features จากเพื่อนบ้าน (local-only 93 ตัว F1 0.70 → ทั้งหมด 0.80) ดูหัวข้อ "ตรวจสอบความถูกต้อง"
 - Recall ~73% ที่ threshold 0.5 ยังพลาดธุรกรรมผิดกฎหมายราว 1 ใน 4 → ดู notebook 2.2 สำหรับการเลือก threshold ตามนโยบาย และการวิเคราะห์ว่าโมเดลแย่ลงหลัง time step 43 หรือไม่ (paper ต้นฉบับรายงานว่า dark market ขนาดใหญ่ถูกปิดในช่วงนั้น ทำให้รูปแบบเปลี่ยน)
 
+### Concept drift: โมเดลพังหลัง time step 43
+
+Recall เฉลี่ยราย time step (threshold 0.5) ก่อนและหลัง time step 43:
+
+| Model | t35–43 | t44–49 | ลดลง |
+|---|---|---|---|
+| Logistic Regression (scaled) | 0.885 | 0.781 | −0.104 |
+| Random Forest | 0.747 | **0.093** | −0.654 |
+| XGBoost | 0.765 | **0.093** | −0.672 |
+
+- หลัง time step 43 โมเดล tree-based จับธุรกรรมผิดกฎหมายได้ไม่ถึง 10% ตรงกับที่ paper ต้นฉบับ (Weber et al., 2019) รายงานว่า dark market ขนาดใหญ่ถูกปิดช่วงนั้น ทำให้รูปแบบธุรกรรมผิดกฎหมายเปลี่ยนไปจากที่โมเดลเคยเห็น
+- Logistic Regression ทนต่อ drift ได้ดีกว่า (recall ยังเหลือ 0.78) แต่แลกกับ precision ที่ต่ำมาก (0.17) โมเดลที่ซับซ้อนกว่าจึงเรียนรู้รูปแบบเฉพาะของช่วง train ได้แม่นกว่า แต่ก็ปรับตัวกับรูปแบบใหม่ได้แย่กว่า
+- **นัยต่องานจริง:** ตัวเลข F1 รวมของทั้ง test set (0.81) ซ่อนปัญหานี้ไว้ ระบบ AML ที่ใช้งานจริงต้อง monitor recall รายช่วงเวลา, retrain เมื่อมี label ใหม่ และไม่ควรพึ่งโมเดลเดียวโดยไม่มีกฎหรือคนตรวจประกอบ
+- ผลของการ retrain แบบ walk-forward และการวัดแยกช่วงด้วย precision/PR-AUC อยู่ใน "ตรวจสอบความถูกต้อง" ด้านล่าง
+
 ## การตรวจสอบเพิ่มเติม (`scripts/validate_threshold.py`)
 
 แบ่งตามเวลา: train 1–24, validation 25–34, test 35–49 (ใช้ test รายงานผลอย่างเดียว) ผลเต็มอยู่ใน `reports/threshold_validation.csv`
@@ -165,7 +180,7 @@ crypto-project/
 - Features ของ Elliptic ถูก anonymize จึงอธิบายความหมายทางธุรกิจของแต่ละ feature ไม่ได้ (SHAP บอกได้แค่ว่า `feat_x` สำคัญ)
 - ยังไม่ได้ใช้ข้อมูลจาก 157k ธุรกรรมที่ไม่มี label (เช่น semi-supervised)
 - ลอง Graph Neural Network (GCN) ที่ใช้โครงสร้างกราฟเต็มรูปแบบ แทน degree features
-- ระบบจริงควร retrain เป็นระยะ และ monitor recall รายช่วงเวลาตามที่เห็นใน drift analysis
+- ทดลองรับมือ drift: retrain แบบ rolling window, ensemble กับ Logistic Regression, หรือแจ้งเตือนอัตโนมัติเมื่อ distribution ของ score เปลี่ยน
 
 ## ทีมพัฒนา
 
