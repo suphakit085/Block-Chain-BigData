@@ -1,11 +1,15 @@
-streamlit
-pandas
-numpy
-plotly
-scikit-learn
-xgboost
-matplotlib
-seaborn
-networkx
-imbalanced-learn
-shap
+streamlit>=1.50,<2
+pandas>=2.2,<3
+numpy>=2.0,<3
+plotly>=6.0,<7
+# Saved models are pickles: keep sklearn/xgboost on the versions they were trained with
+scikit-learn>=1.8,<1.9
+xgboost>=3.4,<4
+imbalanced-learn>=0.14,<0.15
+shap>=0.54,<1
+networkx>=3.4,<4
+pyvis>=0.3.2,<0.4
+matplotlib>=3.9
+seaborn>=0.13
+jupyter
+kaggle
