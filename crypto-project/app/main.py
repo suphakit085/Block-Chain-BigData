@@ -792,11 +792,19 @@ if df is not None and models:
             elif 'selected_tx' in st.session_state:
                 selected_tx = st.session_state['selected_tx']
         else:
-            tx_id_input = st.number_input("Enter Transaction ID (txId)", min_value=0, key="tx_id_input")
-            if tx_id_input in test_txs['txId'].values:
-                selected_tx = test_txs[test_txs['txId'] == tx_id_input]
+            tx_id_input = st.number_input("Enter Transaction ID (txId)", min_value=0, key="tx_id_input",
+                                          help="Any labelled transaction. Test period = time steps 35-49.")
+            if tx_id_input in df['txId'].values:
+                selected_tx = df[df['txId'] == tx_id_input]
             elif tx_id_input != 0:
-                st.error("Transaction ID not found in Test Set.")
+                st.error("Transaction ID not found among labelled transactions.")
+    
+    if selected_tx is not None and int(selected_tx['time_step'].values[0]) <= 34:
+        st.warning(
+            f"This transaction is from time step {int(selected_tx['time_step'].values[0])}, inside the **training period** "
+            "(steps 1-34). The model saw it while learning, so the prediction below is optimistic and is shown "
+            "for exploration only, not as evidence of performance."
+        )
     
     if selected_tx is not None:
         with st.expander("Transaction Details", expanded=True):
@@ -1033,7 +1041,9 @@ if df is not None and models:
                 <h2><span class="material-icons-round">hub</span>Transaction Network</h2>
             </div>
             """, unsafe_allow_html=True)
-            st.markdown("<p style='color: #888;'>ธุรกรรมที่เชื่อมกับรายการนี้โดยตรง (เงินเข้า/ออก) — <span style='color:#FF2D7C'>แดง = Illicit</span>, <span style='color:#00FF88'>เขียว = Licit</span>, เทา = ไม่ทราบ label</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #888;'>ธุรกรรมที่เชื่อมกับรายการนี้ (เงินเข้า/ออก) — <span style='color:#FF2D7C'>แดง = Illicit</span>, <span style='color:#00FF88'>เขียว = Licit</span>, เทา = ไม่ทราบ label · เพิ่มความลึกเพื่อดูเส้นทางเงินหลายทอด เช่น peeling chain</p>", unsafe_allow_html=True)
+            hops = st.slider("Network depth (hops)", min_value=1, max_value=6, value=1, key="network_hops",
+                             help="How many transfers away from this transaction to include (max 150 transactions shown).")
             
             G_tx = load_transaction_graph()
             if G_tx is None:
@@ -1041,11 +1051,11 @@ if df is not None and models:
             else:
                 tx_id = selected_tx['txId'].values[0]
                 label_map = dict(zip(df['txId'], df['label']))
-                graph_html, n_nodes, n_illicit = build_neighbor_graph_html(G_tx, tx_id, label_map, hops=1)
+                graph_html, n_nodes, n_illicit = build_neighbor_graph_html(G_tx, tx_id, label_map, hops=hops)
                 if graph_html is None:
                     st.info("This transaction has no connections in the edge list.")
                 else:
-                    st.caption(f"{n_nodes} transactions shown · {n_illicit} known-illicit neighbours")
+                    st.caption(f"{n_nodes} transactions shown within {hops} hop(s) · {n_illicit} other known-illicit transactions")
                     components.html(graph_html, height=440)
             
             # ============================================
