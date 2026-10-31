@@ -1,5 +1,7 @@
 # Bitcoin AML: ตรวจจับธุรกรรมผิดกฎหมายด้วย Machine Learning
 
+**Live demo:** [https://block-chain-bigdata-bjyf5p9jt7nkghlee9gaoe.streamlit.app/](https://block-chain-bigdata-bjyf5p9jt7nkghlee9gaoe.streamlit.app/)
+
 ระบบตรวจจับธุรกรรม Bitcoin ที่เกี่ยวข้องกับกิจกรรมผิดกฎหมาย (ฟอกเงิน, ransomware, dark market) จาก **Elliptic Dataset**
 พร้อม Dashboard ที่ออกแบบจากมุมมองของทีม Compliance / AML: อธิบายได้ว่า *ทำไม* ธุรกรรมถูกตั้งธง (SHAP), ปรับ threshold ตามกำลังคนที่ตรวจได้, ติดตามว่าโมเดลเสื่อมตามเวลาหรือไม่ และดูเครือข่ายการโอนเงินรอบธุรกรรมที่น่าสงสัย
 

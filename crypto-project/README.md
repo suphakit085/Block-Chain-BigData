@@ -1,5 +1,7 @@
 # crypto-project
 
+**Live demo:** [https://block-chain-bigdata-bjyf5p9jt7nkghlee9gaoe.streamlit.app/](https://block-chain-bigdata-bjyf5p9jt7nkghlee9gaoe.streamlit.app/)
+
 รายละเอียดโปรเจกต์ ผลลัพธ์ และวิธีรัน อยู่ใน [README หลัก](../README.md)
 
 Quick start (รันจากโฟลเดอร์นี้):
