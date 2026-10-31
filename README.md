@@ -41,13 +41,13 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 
 | Model | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|
-| **XGBoost** | **0.905** | 0.733 | **0.810** | 0.941 |
-| Random Forest | 0.926 | 0.718 | 0.809 | 0.945 |
+| XGBoost | 0.898 | 0.729 | 0.805 | 0.943 |
+| Random Forest | 0.912 | 0.720 | 0.805 | 0.945 |
 | Logistic Regression (scaled, C=0.01) | 0.168 | 0.902 | 0.284 | 0.881 |
 
 **ข้อสังเกต**
 - Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 6 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm
-- Graph features (in/out-degree) ช่วยได้เล็กน้อย: XGBoost F1 0.804 → 0.810 เมื่อเทียบกับไม่มี graph features
+- Graph features (in/out-degree) **ไม่ได้ช่วย**: XGBoost ไม่มี degree ได้ F1 0.811 เทียบกับมี 0.805 (อยู่ในช่วงความคลาดเคลื่อน) ฟีเจอร์ที่ช่วยจริงคือ aggregated features จากเพื่อนบ้าน (local-only 93 ตัว F1 0.70 → ทั้งหมด 0.80) ดูหัวข้อ "ตรวจสอบความถูกต้อง"
 - Recall ~73% ที่ threshold 0.5 ยังพลาดธุรกรรมผิดกฎหมายราว 1 ใน 4 → ดู notebook 2.2 สำหรับการเลือก threshold ตามนโยบาย และการวิเคราะห์ว่าโมเดลแย่ลงหลัง time step 43 หรือไม่ (paper ต้นฉบับรายงานว่า dark market ขนาดใหญ่ถูกปิดในช่วงนั้น ทำให้รูปแบบเปลี่ยน)
 
 ## การตรวจสอบเพิ่มเติม (`scripts/validate_threshold.py`)
@@ -59,6 +59,27 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 - **Isotonic calibration ช่วยให้ probability ตรงขึ้น** (Brier ของ RF 0.033 → 0.023) แต่ไม่ได้ช่วยแยกธุรกรรมผิดกฎหมายได้ดีขึ้น
 - **Degree features ไม่รั่วข้อมูลอนาคต**: edge ทั้ง 234,355 เส้นอยู่ภายใน time step เดียวกัน
 - Logistic Regression ต้อง scale ฟีเจอร์ (PR-AUC 0.19 → 0.36) แต่ยังอ่อนกว่าโมเดล tree มาก
+
+## ตรวจสอบความถูกต้อง (`scripts/audit_data.py`, `scripts/audit_models.py`)
+
+**ข้อมูล** — ผ่านทุกข้อ: จำนวนแถว 46,564 ตรงกับ raw ที่มี label, txId ไม่ซ้ำ, label=1 ตรงกับ class "1" (illicit) ทุกแถว, feature ตรงกับไฟล์ raw, in/out-degree ตรงกับ edge list และ edge ทุกเส้นอยู่ใน time step เดียวกัน (ไม่รั่วข้อมูลอนาคต)
+
+**โมเดลทำนายได้จริง ไม่ใช่ความบังเอิญ**
+- สลับ label แล้วฝึกด้วย pipeline เดิม → PR-AUC 0.060 (ใกล้ prevalence 0.065) ยืนยันว่าไม่มี leakage ใน pipeline
+- Random scorer ได้ PR-AUC 0.066 / ROC-AUC 0.50 เทียบกับ XGBoost 0.814 / 0.943
+- Bootstrap 95% CI ของ F1 (test set): XGBoost [0.784, 0.824], Random Forest [0.785, 0.824] → สองโมเดลไม่ต่างกันอย่างมีนัยสำคัญ
+- ผลใกล้เคียง baseline Random Forest ใน paper ต้นฉบับของ Elliptic (illicit F1 ≈ 0.80)
+
+**ข้อจำกัดสำคัญ: โมเดลมองไม่เห็น fraud หลัง time step 43**
+
+| ช่วง | ธุรกรรม | illicit | Precision | Recall | F1 | PR-AUC |
+|---|---|---|---|---|---|---|
+| step 35–42 | 9,983 | 914 | 0.954 | 0.861 | 0.905 | 0.927 |
+| step 43–49 | 6,687 | 169 | 0.055 | 0.018 | 0.027 | 0.057 |
+
+ตัวเลข F1 0.805 รวมทั้งช่วงจึงดีกว่าความจริงหลัง step 43 มาก PR-AUC หลัง step 43 (0.057) ใกล้ prevalence ของช่วงนั้น (~0.025) แปลว่า *การจัดอันดับก็ใช้ไม่ได้* ไม่ใช่แค่ threshold ผิด การลด threshold จึงไม่ช่วย ต้อง retrain ด้วยข้อมูลใหม่หรือใช้โมเดลที่ทนต่อ drift ในระบบจริงต้อง monitor recall รายช่วงเวลา (ดู "Performance Over Time" ใน dashboard)
+
+**Ablation** (F1 บน test): ทุกฟีเจอร์ 0.805 · ไม่มี degree 0.811 · local-only 93 ตัว 0.70 · degree อย่างเดียว 0.16
 
 ## Dashboard (Streamlit)
 
