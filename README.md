@@ -45,6 +45,8 @@ Test set = time step 35–49 (16,670 ธุรกรรม, illicit 1,083), thre
 | Random Forest | 0.912 | 0.720 | 0.805 | 0.945 |
 | Logistic Regression (scaled, C=0.01) | 0.168 | 0.902 | 0.284 | 0.881 |
 
+*หมายเหตุ: ตารางและ dashboard นับเป็น fraud เมื่อ P ≥ threshold ส่วน `model.predict()` ของ sklearn ปัดกรณี P = 0.5 พอดีเป็น licit — RF มี 15 ธุรกรรมที่ได้ 0.5 พอดี จึงได้ precision 0.926 / F1 0.809 ใน notebook 2.1 แทน 0.912 / 0.805 (XGBoost และ LR ไม่ได้รับผล)*
+
 **ข้อสังเกต**
 - Tree-based models ดีกว่า Logistic Regression ชัดเจน LR ได้ recall สูง แต่ precision ต่ำมาก (แจ้งเตือน 6 ครั้งเป็นของจริงแค่ 1) ซึ่งใช้งานจริงไม่ได้เพราะทีมตรวจจะจมกับ false alarm
 - Graph features (in/out-degree) **ไม่ได้ช่วย**: XGBoost ไม่มี degree ได้ F1 0.811 เทียบกับมี 0.805 (อยู่ในช่วงความคลาดเคลื่อน) ฟีเจอร์ที่ช่วยจริงคือ aggregated features จากเพื่อนบ้าน (local-only 93 ตัว F1 0.70 → ทั้งหมด 0.80) ดูหัวข้อ "ตรวจสอบความถูกต้อง"
