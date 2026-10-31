@@ -1051,11 +1051,16 @@ if df is not None and models:
             else:
                 tx_id = selected_tx['txId'].values[0]
                 label_map = dict(zip(df['txId'], df['label']))
-                graph_html, n_nodes, n_illicit = build_neighbor_graph_html(G_tx, tx_id, label_map, hops=hops)
+                graph_html, net_info = build_neighbor_graph_html(G_tx, tx_id, label_map, hops=hops)
                 if graph_html is None:
                     st.info("This transaction has no connections in the edge list.")
                 else:
-                    st.caption(f"{n_nodes} transactions shown within {hops} hop(s) · {n_illicit} other known-illicit transactions")
+                    found = f"{net_info['found']:,}" + ("+" if not net_info['complete'] else "")
+                    st.caption(f"{found} transactions within {hops} hop(s) · {net_info['illicit_found']:,} of them known-illicit")
+                    if net_info['truncated']:
+                        st.caption(f"Showing the nearest {net_info['shown']} ({net_info['illicit_shown']} illicit). "
+                                   "Farther transactions were left out; nearer hops and illicit ones are kept first. "
+                                   "Lower the depth for a readable view of busy hubs.")
                     components.html(graph_html, height=440)
             
             # ============================================

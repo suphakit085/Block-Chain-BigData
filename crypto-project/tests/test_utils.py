@@ -66,3 +66,28 @@ def test_metrics_by_period_splits_at_drift_step():
     assert out['Period'].tolist() == ['Steps 35-42', 'Steps 43-49']
     # probs [0.9, 0.8, 0.4, 0.1]: fraud at step 35 is caught, fraud at step 43 is missed
     assert out['Recall'].tolist() == [1.0, 0.0]
+
+
+def _toy_graph():
+    import networkx as nx
+    # tx 0 -> 1 -> 2 (chain); hub 1 also receives from 100..109; 2 -> 3 (illicit, 2 hops from 0)
+    G = nx.DiGraph([(0, 1), (1, 2), (2, 3)] + [(h, 1) for h in range(100, 110)])
+    labels = {3: 1, 105: 1, 101: 0}
+    return G, labels
+
+
+def test_neighborhood_keeps_nearest_hops_before_farther_ones():
+    G, labels = _toy_graph()
+    info = utils.collect_neighborhood(G, 0, labels, hops=3, max_nodes=5)
+    assert info['found'] == 14            # 0, 1, then 2 + 10 hub inputs, then 3
+    assert info['truncated']
+    assert {0, 1} <= info['nodes']        # hop 0 and hop 1 always kept
+    assert 3 not in info['nodes']         # hop 3 dropped before any hop-2 node
+    assert info['illicit_found'] == 2     # counted even though not shown
+
+
+def test_neighborhood_prefers_illicit_then_licit_in_overflowing_hop():
+    G, labels = _toy_graph()
+    info = utils.collect_neighborhood(G, 0, labels, hops=2, max_nodes=4)
+    # hop-2 candidates: 2 (unknown), 100..109 (105 illicit, 101 licit); two slots left
+    assert info['nodes'] == {0, 1, 105, 101}

@@ -246,32 +246,64 @@ def load_transaction_graph():
     )
 
 
-def build_neighbor_graph_html(G, tx_id, label_map, hops=1, max_nodes=150):
+def collect_neighborhood(G, tx_id, label_map, hops=1, max_nodes=150, explore_limit=20000):
     """
-    Renders the neighbourhood of one transaction as interactive HTML (pyvis).
-    Red = illicit, green = licit, grey = unknown label.
-    Returns (html, n_nodes, n_illicit_neighbors) or (None, 0, 0) if tx is not in the graph.
+    Breadth-first neighbourhood of `tx_id` (money in or out), nearest hops first.
+
+    Whole hop levels are kept while they fit in `max_nodes`; in the level that
+    overflows, known-illicit transactions are kept first, then licit, then unknown.
+    Nearer transactions are therefore never dropped in favour of farther ones.
+
+    Returns a dict with the kept node set and what was found before truncation:
+      nodes, distance (node -> hops), found (total within `hops`), illicit_found,
+      truncated (bool), complete (False if exploration stopped at `explore_limit`).
     """
-    from pyvis.network import Network
-
-    if G is None or tx_id not in G:
-        return None, 0, 0
-
-    nodes = {tx_id}
-    frontier = {tx_id}
-    for _ in range(hops):
+    distance = {tx_id: 0}
+    frontier = [tx_id]
+    complete = True
+    for d in range(1, hops + 1):
         nxt = set()
         for n in frontier:
             nxt.update(G.successors(n))
             nxt.update(G.predecessors(n))
-        nxt -= nodes
-        nodes |= nxt
+        nxt = [n for n in nxt if n not in distance]
+        for n in nxt:
+            distance[n] = d
         frontier = nxt
-        if len(nodes) >= max_nodes:
+        if not frontier:
             break
-    if len(nodes) > max_nodes:
-        others = sorted(nodes - {tx_id})[:max_nodes - 1]
-        nodes = {tx_id, *others}
+        if len(distance) >= explore_limit:
+            complete = False
+            break
+
+    priority = {1: 0, 0: 1}  # illicit, then licit, then unknown
+    ranked = sorted(distance, key=lambda n: (distance[n], priority.get(label_map.get(n, -1), 2), n))
+    kept = set(ranked[:max_nodes])
+    illicit_found = sum(1 for n in distance if n != tx_id and label_map.get(n, -1) == 1)
+    return {
+        'nodes': kept,
+        'distance': distance,
+        'found': len(distance),
+        'illicit_found': illicit_found,
+        'truncated': len(distance) > len(kept),
+        'complete': complete,
+    }
+
+
+def build_neighbor_graph_html(G, tx_id, label_map, hops=1, max_nodes=150):
+    """
+    Renders the neighbourhood of one transaction as interactive HTML (pyvis).
+    Red = illicit, green = licit, grey = unknown label.
+    Returns (html, info) where info is collect_neighborhood()'s summary plus
+    'shown' and 'illicit_shown'; (None, None) if tx is not in the graph.
+    """
+    from pyvis.network import Network
+
+    if G is None or tx_id not in G:
+        return None, None
+
+    info = collect_neighborhood(G, tx_id, label_map, hops=hops, max_nodes=max_nodes)
+    nodes = info['nodes']
 
     sub = G.subgraph(nodes)
     net = Network(height='420px', width='100%', bgcolor='#0E1117', font_color='#FAFAFA',
@@ -288,7 +320,7 @@ def build_neighbor_graph_html(G, tx_id, label_map, hops=1, max_nodes=150):
         net.add_node(
             str(n),
             label='THIS TX' if n == tx_id else str(n)[-4:],
-            title=f"txId {n} — {status}",
+            title=f"txId {n} — {status} — {info['distance'][n]} hop(s) away",
             color={'background': color, 'border': '#00D4FF' if n == tx_id else color},
             size=28 if n == tx_id else 12,
             borderWidth=4 if n == tx_id else 1,
@@ -296,7 +328,9 @@ def build_neighbor_graph_html(G, tx_id, label_map, hops=1, max_nodes=150):
     for u, v in sub.edges():
         net.add_edge(str(u), str(v), color='rgba(255,255,255,0.35)', arrows='to')
 
-    return net.generate_html(notebook=False), sub.number_of_nodes(), n_illicit
+    info['shown'] = sub.number_of_nodes()
+    info['illicit_shown'] = n_illicit
+    return net.generate_html(notebook=False), info
 
 
 def create_export_data(tx_data, prediction, probability, model_name):
